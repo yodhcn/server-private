@@ -4,6 +4,10 @@ import { updateTrendingSubjects } from '@app/lib/trending/subject.ts';
 import { updateTrendingSubjectTopics } from '@app/lib/trending/topic.ts';
 import { TrendingPeriod } from '@app/lib/trending/type.ts';
 
+/*
+更新热门条目
+更新热门条目
+*/
 export async function trendingSubjects() {
   logger.info('Updating trending subjects...');
   for (const subjectType of SubjectTypeValues) {
