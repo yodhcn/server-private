@@ -141,7 +141,7 @@ exports[`should build private api spec 1`] = `
         redirect:
           type: integer
         role:
-          type: integer
+          $ref: '#/components/schemas/CharacterType'
         summary:
           type: string
       required:
@@ -239,6 +239,45 @@ exports[`should build private api spec 1`] = `
       x-ms-enum:
         modelAsString: false
         name: CharacterCastType
+    CharacterCreate:
+      additionalProperties: false
+      properties:
+        img:
+          description: base64 encoded raw bytes, 4mb size limit on **decoded** size
+          format: byte
+          type: string
+        infobox:
+          minLength: 1
+          type: string
+        name:
+          minLength: 1
+          type: string
+        summary:
+          type: string
+        type:
+          $ref: '#/components/schemas/CharacterType'
+      required:
+        - name
+        - infobox
+        - summary
+        - type
+      type: object
+    CharacterEdit:
+      additionalProperties: false
+      properties:
+        infobox:
+          minLength: 1
+          type: string
+        name:
+          minLength: 1
+          type: string
+        summary:
+          type: string
+      required:
+        - name
+        - infobox
+        - summary
+      type: object
     CharacterRelation:
       properties:
         character:
@@ -340,14 +379,39 @@ exports[`should build private api spec 1`] = `
           - order
         type: object
       type: array
+    CharacterType:
+      description: |-
+        角色类型
+          - 1 = 角色
+          - 2 = 机体
+          - 3 = 舰船
+          - 4 = 组织机构
+      enum:
+        - 1
+        - 2
+        - 3
+        - 4
+      type: integer
+      x-enum-varnames:
+        - Crt
+        - Mecha
+        - Vessel
+        - Org
+      x-ms-enum:
+        modelAsString: false
+        name: CharacterType
     CharacterWikiInfo:
       properties:
         id:
           type: integer
         infobox:
           type: string
+        locked:
+          type: boolean
         name:
           type: string
+        redirect:
+          type: integer
         summary:
           type: string
       required:
@@ -355,6 +419,8 @@ exports[`should build private api spec 1`] = `
         - name
         - infobox
         - summary
+        - locked
+        - redirect
       type: object
     CollectSubject:
       properties:
@@ -1319,7 +1385,7 @@ exports[`should build private api spec 1`] = `
         summary:
           type: string
         type:
-          type: integer
+          $ref: '#/components/schemas/PersonType'
       required:
         - id
         - name
@@ -1394,6 +1460,80 @@ exports[`should build private api spec 1`] = `
       required:
         - user
         - createdAt
+      type: object
+    PersonCreate:
+      additionalProperties: false
+      properties:
+        img:
+          description: base64 encoded raw bytes, 4mb size limit on **decoded** size
+          format: byte
+          type: string
+        infobox:
+          minLength: 1
+          type: string
+        name:
+          minLength: 1
+          type: string
+        profession:
+          properties:
+            actor:
+              type: boolean
+            artist:
+              type: boolean
+            illustrator:
+              type: boolean
+            mangaka:
+              type: boolean
+            producer:
+              type: boolean
+            seiyu:
+              type: boolean
+            writer:
+              type: boolean
+          type: object
+        summary:
+          type: string
+        type:
+          $ref: '#/components/schemas/PersonType'
+      required:
+        - name
+        - infobox
+        - summary
+        - type
+      type: object
+    PersonEdit:
+      additionalProperties: false
+      properties:
+        infobox:
+          minLength: 1
+          type: string
+        name:
+          minLength: 1
+          type: string
+        profession:
+          properties:
+            actor:
+              type: boolean
+            artist:
+              type: boolean
+            illustrator:
+              type: boolean
+            mangaka:
+              type: boolean
+            producer:
+              type: boolean
+            seiyu:
+              type: boolean
+            writer:
+              type: boolean
+          type: object
+        summary:
+          type: string
+      required:
+        - name
+        - infobox
+        - summary
+        - profession
       type: object
     PersonImages:
       properties:
@@ -1555,6 +1695,8 @@ exports[`should build private api spec 1`] = `
           type: integer
         infobox:
           type: string
+        locked:
+          type: boolean
         name:
           type: string
         profession:
@@ -1574,6 +1716,8 @@ exports[`should build private api spec 1`] = `
             writer:
               type: boolean
           type: object
+        redirect:
+          type: integer
         summary:
           type: string
         typeID:
@@ -1584,6 +1728,8 @@ exports[`should build private api spec 1`] = `
         - typeID
         - infobox
         - summary
+        - locked
+        - redirect
         - profession
       type: object
     PersonWork:
@@ -1839,10 +1985,13 @@ exports[`should build private api spec 1`] = `
           type: integer
         creator:
           properties:
+            nickname:
+              type: string
             username:
               type: string
           required:
             - username
+            - nickname
           type: object
         id:
           type: integer
@@ -1867,19 +2016,19 @@ exports[`should build private api spec 1`] = `
           - 5 = 条目->角色关联
           - 6 = 条目->声优关联
           - 10 = 条目->人物关联
-         
+
           - 2 = 角色编辑
           - 13 = 角色合体
           - 14 = 角色删除
           - 4 = 角色->条目关联
           - 7 = 角色->声优关联
-         
+
           - 3 = 人物编辑
           - 15 = 人物合体
           - 16 = 人物删除
           - 8 = 人物->声优关联
           - 9 = 人物->条目关联
-         
+
           - 18 = 章节编辑
           - 181 = 章节合体
           - 182 = 章节移动
@@ -3095,6 +3244,8 @@ exports[`should build private api spec 1`] = `
           type: integer
         infobox:
           type: string
+        locked:
+          type: boolean
         metaTags:
           items:
             type: string
@@ -3104,6 +3255,8 @@ exports[`should build private api spec 1`] = `
         nsfw:
           type: boolean
         platform:
+          type: integer
+        redirect:
           type: integer
         series:
           type: boolean
@@ -3116,6 +3269,8 @@ exports[`should build private api spec 1`] = `
         - name
         - typeID
         - infobox
+        - locked
+        - redirect
         - platform
         - availablePlatform
         - metaTags
@@ -10031,6 +10186,85 @@ paths:
       summary: 获取用户时间胶囊
       tags:
         - user
+  /p1/wiki/characters:
+    post:
+      operationId: postCharacterInfo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
+                character:
+                  additionalProperties: false
+                  properties:
+                    img:
+                      description: >-
+                        base64 encoded raw bytes, 4mb size limit on **decoded**
+                        size
+                      format: byte
+                      type: string
+                    infobox:
+                      minLength: 1
+                      type: string
+                    name:
+                      minLength: 1
+                      type: string
+                    summary:
+                      type: string
+                    type:
+                      $ref: '#/components/schemas/CharacterType'
+                  required:
+                    - name
+                    - infobox
+                    - summary
+                    - type
+                  type: object
+              required:
+                - character
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  characterID:
+                    type: integer
+                required:
+                  - characterID
+                type: object
+          description: Default Response
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      security:
+        - CookiesSession: []
+          HTTPBearer: []
+      summary: 创建角色
+      tags:
+        - wiki
   /p1/wiki/characters/-/casts/revisions/{revisionID}:
     get:
       operationId: getCharacterCastRevisionInfo
@@ -10192,6 +10426,12 @@ paths:
             schema:
               additionalProperties: false
               properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
                 character:
                   additionalProperties: false
                   properties:
@@ -10241,6 +10481,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
           description: default error response type
         '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '403':
           content:
             application/json:
               schema:
@@ -10372,6 +10618,73 @@ paths:
       summary: 获取角色 wiki 历史编辑摘要
       tags:
         - wiki
+  /p1/wiki/characters/{characterID}/potraits:
+    post:
+      operationId: uploadCharacterPotrait
+      parameters:
+        - in: path
+          name: characterID
+          required: true
+          schema:
+            minimum: 1
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
+                img:
+                  description: base64 encoded raw bytes, 4mb size limit on **decoded** size
+                  format: byte
+                  type: string
+              required:
+                - img
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  img:
+                    description: image filename
+                    type: string
+                required:
+                  - img
+                type: object
+          description: Default Response
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      security:
+        - CookiesSession: []
+          HTTPBearer: []
+      summary: 上传角色肖像
+      tags:
+        - wiki
   /p1/wiki/characters/{characterID}/subjects/history-summary:
     get:
       operationId: characterSubjectHistorySummary
@@ -10490,6 +10803,12 @@ paths:
                 nameCN: old cn name
             schema:
               properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
                 commitMessage:
                   type: string
                 episode:
@@ -10598,6 +10917,102 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           description: 意料之外的服务器错误
+      tags:
+        - wiki
+  /p1/wiki/persons:
+    post:
+      operationId: postPersonInfo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
+                person:
+                  additionalProperties: false
+                  properties:
+                    img:
+                      description: >-
+                        base64 encoded raw bytes, 4mb size limit on **decoded**
+                        size
+                      format: byte
+                      type: string
+                    infobox:
+                      minLength: 1
+                      type: string
+                    name:
+                      minLength: 1
+                      type: string
+                    profession:
+                      properties:
+                        actor:
+                          type: boolean
+                        artist:
+                          type: boolean
+                        illustrator:
+                          type: boolean
+                        mangaka:
+                          type: boolean
+                        producer:
+                          type: boolean
+                        seiyu:
+                          type: boolean
+                        writer:
+                          type: boolean
+                      type: object
+                    summary:
+                      type: string
+                    type:
+                      $ref: '#/components/schemas/PersonType'
+                  required:
+                    - name
+                    - infobox
+                    - summary
+                    - type
+                  type: object
+              required:
+                - person
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  personID:
+                    type: integer
+                required:
+                  - personID
+                type: object
+          description: Default Response
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      security:
+        - CookiesSession: []
+          HTTPBearer: []
+      summary: 创建人物
       tags:
         - wiki
   /p1/wiki/persons/-/casts/revisions/{revisionID}:
@@ -10761,6 +11176,12 @@ paths:
             schema:
               additionalProperties: false
               properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
                 commitMessage:
                   minLength: 1
                   type: string
@@ -10786,6 +11207,23 @@ paths:
                     name:
                       minLength: 1
                       type: string
+                    profession:
+                      properties:
+                        actor:
+                          type: boolean
+                        artist:
+                          type: boolean
+                        illustrator:
+                          type: boolean
+                        mangaka:
+                          type: boolean
+                        producer:
+                          type: boolean
+                        seiyu:
+                          type: boolean
+                        writer:
+                          type: boolean
+                      type: object
                     summary:
                       type: string
                   type: object
@@ -10810,6 +11248,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
           description: default error response type
         '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '403':
           content:
             application/json:
               schema:
@@ -10941,6 +11385,73 @@ paths:
       summary: 获取人物 wiki 历史编辑摘要
       tags:
         - wiki
+  /p1/wiki/persons/{personID}/potraits:
+    post:
+      operationId: uploadPersonPotrait
+      parameters:
+        - in: path
+          name: personID
+          required: true
+          schema:
+            minimum: 1
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              properties:
+                authorID:
+                  description: >-
+                    when header x-admin-token is provided, use this as author
+                    id.
+                  exclusiveMinimum: 0
+                  type: integer
+                img:
+                  description: base64 encoded raw bytes, 4mb size limit on **decoded** size
+                  format: byte
+                  type: string
+              required:
+                - img
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  img:
+                    description: image filename
+                    type: string
+                required:
+                  - img
+                type: object
+          description: Default Response
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      security:
+        - CookiesSession: []
+          HTTPBearer: []
+      summary: 上传人物肖像
+      tags:
+        - wiki
   /p1/wiki/persons/{personID}/subjects/history-summary:
     get:
       operationId: personSubjectHistorySummary
@@ -10998,10 +11509,148 @@ paths:
       summary: 获取人物-条目关联 wiki 历史编辑摘要
       tags:
         - wiki
-  /p1/wiki/recent:
+  /p1/wiki/recent/characters:
+    get:
+      description: 获取最近两天的角色wiki更新
+      operationId: getRecentCharacterWiki
+      parameters:
+        - description: |-
+            unix time stamp, only return last update time >= since
+
+            only allow recent 2 days
+          in: path
+          name: since
+          required: true
+          schema:
+            default: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    createdAt:
+                      type: integer
+                    id:
+                      type: integer
+                  required:
+                    - id
+                    - createdAt
+                  type: object
+                type: array
+          description: Default Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      tags:
+        - wiki
+  /p1/wiki/recent/episodes:
+    get:
+      description: 获取最近两天的章节wiki更新
+      operationId: getRecentEpisodeWiki
+      parameters:
+        - description: |-
+            unix time stamp, only return last update time >= since
+
+            only allow recent 2 days
+          in: path
+          name: since
+          required: true
+          schema:
+            default: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    createdAt:
+                      type: integer
+                    id:
+                      type: integer
+                  required:
+                    - id
+                    - createdAt
+                  type: object
+                type: array
+          description: Default Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      tags:
+        - wiki
+  /p1/wiki/recent/persons:
+    get:
+      description: 获取最近两天的人物wiki更新
+      operationId: getRecentPersonWiki
+      parameters:
+        - description: |-
+            unix time stamp, only return last update time >= since
+
+            only allow recent 2 days
+          in: path
+          name: since
+          required: true
+          schema:
+            default: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    createdAt:
+                      type: integer
+                    id:
+                      type: integer
+                  required:
+                    - id
+                    - createdAt
+                  type: object
+                type: array
+          description: Default Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: default error response type
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: 意料之外的服务器错误
+      tags:
+        - wiki
+  /p1/wiki/recent/subjects:
     get:
       description: 获取最近两天的wiki更新
-      operationId: getRecentWiki
+      operationId: getRecentSubjectWiki
       parameters:
         - description: |-
             unix time stamp, only return last update time >= since
@@ -11962,6 +12611,23 @@ paths:
     get:
       operationId: subjectEditHistorySummary
       parameters:
+        - description: max 100
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: min 0
+          in: query
+          name: offset
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
         - in: path
           name: subjectID
           required: true
@@ -11973,9 +12639,18 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/RevisionHistory'
-                type: array
+                properties:
+                  data:
+                    items:
+                      $ref: '#/components/schemas/RevisionHistory'
+                    type: array
+                  total:
+                    description: limit+offset 为参数的请求表示总条数，page 为参数的请求表示总页数
+                    type: integer
+                required:
+                  - data
+                  - total
+                type: object
           description: Default Response
         '401':
           content:

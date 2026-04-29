@@ -10,6 +10,7 @@ export function addSchemas(app: App) {
 }
 
 function addCommonSchemas(app: App) {
+  app.addSchema(common.CharacterType);
   app.addSchema(common.CharacterCastType);
   app.addSchema(common.CollectionType);
   app.addSchema(common.EpisodeCollectionStatus);
@@ -18,6 +19,7 @@ function addCommonSchemas(app: App) {
   app.addSchema(common.GroupMemberRole);
   app.addSchema(common.IndexRelatedCategory);
   app.addSchema(common.IndexType);
+  app.addSchema(common.PersonType);
   app.addSchema(common.ReportReason);
   app.addSchema(common.ReportType);
   app.addSchema(common.RevisionType);
@@ -26,6 +28,8 @@ function addCommonSchemas(app: App) {
 }
 
 function addRequestSchemas(app: App) {
+  app.addSchema(req.CharacterCreate);
+  app.addSchema(req.CharacterEdit);
   app.addSchema(req.CharacterSearchFilter);
   app.addSchema(req.CollectSubject);
   app.addSchema(req.CreateContent);
@@ -38,6 +42,8 @@ function addRequestSchemas(app: App) {
   app.addSchema(req.GroupFilterMode);
   app.addSchema(req.GroupSort);
   app.addSchema(req.GroupTopicFilterMode);
+  app.addSchema(req.PersonCreate);
+  app.addSchema(req.PersonEdit);
   app.addSchema(req.PersonSearchFilter);
   app.addSchema(req.SearchCharacter);
   app.addSchema(req.SearchPerson);
@@ -61,8 +67,10 @@ function addResponseSchemas(app: App) {
   app.addSchema(res.Character);
   app.addSchema(res.CharacterCast);
   app.addSchema(res.CharacterRelation);
+  app.addSchema(res.CharacterRevisionWikiInfo);
   app.addSchema(res.CharacterSubject);
   app.addSchema(res.CharacterSubjectRelation);
+  app.addSchema(res.CharacterWikiInfo);
   app.addSchema(res.Comment);
   app.addSchema(res.Episode);
   app.addSchema(res.Error);
@@ -82,6 +90,8 @@ function addResponseSchemas(app: App) {
   app.addSchema(res.PersonImages);
   app.addSchema(res.PersonRelation);
   app.addSchema(res.PersonRelationType);
+  app.addSchema(res.PersonRevisionWikiInfo);
+  app.addSchema(res.PersonWikiInfo);
   app.addSchema(res.PersonWork);
   app.addSchema(res.Post);
   app.addSchema(res.Profile);

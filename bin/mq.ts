@@ -1,27 +1,72 @@
-import { handleSubjectDate } from '@app/event/subject';
+import { handle as handleBlogEvent } from '@app/event/blog';
+import { handle as handleCharacterEvent } from '@app/event/character';
+import {
+  handle as handleGroupEvent,
+  handleMember as handleGroupMemberEvent,
+  handleTopic as handleGroupTopicEvent,
+} from '@app/event/group';
+import { handle as handleIndexEvent } from '@app/event/index';
+import { handle as handleNotifyEvent } from '@app/event/notify';
+import { handle as handlePersonEvent } from '@app/event/person';
+import {
+  handle as handleSubjectEvent,
+  handleEpisode as handleEpisodeEvent,
+  handleFields as handleSubjectFieldsEvent,
+  handleSubjectDate,
+  handleTopic as handleSubjectTopicEvent,
+} from '@app/event/subject';
 import { handle as handleTimelineEvent } from '@app/event/timeline';
 import type { KafkaMessage, Payload } from '@app/event/type';
+import { handle as handleUserEvent, handleFriend as handleFriendEvent } from '@app/event/user';
 import { newConsumer } from '@app/lib/kafka.ts';
 import { logger } from '@app/lib/logger';
 import { handleTimelineMessage } from '@app/lib/timeline/kafka.ts';
 
 const TOPICS = [
   'timeline',
-  'debezium.chii.bangumi.chii_timeline',
+  'notify.v1',
+
+  // 'debezium.chii.bangumi.chii_pms',
+  // 'debezium.chii.bangumi.chii_subject_revisions',
+  'debezium.chii.bangumi.chii_blog_entry',
+  'debezium.chii.bangumi.chii_characters',
+  'debezium.chii.bangumi.chii_episodes',
+  'debezium.chii.bangumi.chii_groups',
+  'debezium.chii.bangumi.chii_group_members',
+  'debezium.chii.bangumi.chii_group_topics',
+  'debezium.chii.bangumi.chii_index',
+  'debezium.chii.bangumi.chii_members',
+  'debezium.chii.bangumi.chii_friends',
+  'debezium.chii.bangumi.chii_persons',
+  'debezium.chii.bangumi.chii_subject_fields',
+  'debezium.chii.bangumi.chii_subject_topics',
   'debezium.chii.bangumi.chii_subjects',
+  'debezium.chii.bangumi.chii_timeline',
   'debezium.chii.bangumi.chii_subject_revisions',
 ];
 
 type Handler = (msg: KafkaMessage) => Promise<void>;
 
 const binlogHandlers: Record<string, Handler | Handler[]> = {
-  chii_subjects: handleSubjectDate,
-  chii_subject_revisions: handleSubjectDate,
+  chii_blog_entry: handleBlogEvent,
+  chii_characters: handleCharacterEvent,
+  chii_episodes: handleEpisodeEvent,
+  chii_groups: handleGroupEvent,
+  chii_group_members: handleGroupMemberEvent,
+  chii_group_topics: handleGroupTopicEvent,
+  chii_index: handleIndexEvent,
+  chii_members: handleUserEvent,
+  chii_friends: handleFriendEvent,
+  chii_persons: handlePersonEvent,
+  chii_subject_fields: handleSubjectFieldsEvent,
+  chii_subject_topics: handleSubjectTopicEvent,
+  chii_subjects: [handleSubjectEvent, handleSubjectDate],
   chii_timeline: handleTimelineEvent,
+  chii_subject_revisions: handleSubjectDate,
 };
 
 async function onBinlogMessage(msg: KafkaMessage) {
-  const payload = JSON.parse(msg.value) as Payload;
+  const payload = JSON.parse(msg.value.toString()) as Payload;
   const handler = binlogHandlers[payload.source.table];
   if (!handler) {
     return;
@@ -46,6 +91,7 @@ async function onBinlogMessage(msg: KafkaMessage) {
 
 const serviceHandlers: Record<string, Handler> = {
   timeline: handleTimelineMessage,
+  'notify.v1': handleNotifyEvent,
 };
 
 async function onServiceMessage(msg: KafkaMessage) {
@@ -68,28 +114,34 @@ async function main() {
   const consumer = await newConsumer(TOPICS);
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
-      if (!message.key) {
-        return;
-      }
       if (!message.value) {
         return;
       }
       try {
         if (topic.startsWith('debezium.')) {
+          if (!message.key) {
+            return;
+          }
           await onBinlogMessage({
             topic: topic,
             key: message.key.toString(),
-            value: message.value.toString(),
+            value: message.value,
           });
         } else {
+          const key = message.key?.toString() ?? '';
+          logger.info(`processing message ${topic} ${message.offset} ${key}`);
+
           await onServiceMessage({
             topic: topic,
-            key: message.key.toString(),
-            value: message.value.toString(),
+            key,
+            value: message.value,
           });
         }
       } catch (error) {
-        logger.error(error, `error processing message ${message.key.toString()}`);
+        logger.error(
+          error,
+          `error processing message ${topic} ${message.offset} ${message.key?.toString() ?? ''}`,
+        );
       }
     },
   });

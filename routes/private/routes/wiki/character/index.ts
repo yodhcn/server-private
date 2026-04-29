@@ -1,60 +1,45 @@
+import * as crypto from 'node:crypto';
+
+import type { Wiki } from '@bgm38/wiki';
+import { parse, WikiSyntaxError } from '@bgm38/wiki';
+import { DateTime } from 'luxon';
 import type { Static } from 'typebox';
 import t from 'typebox';
 
 import { db, op, schema } from '@app/drizzle';
+import { HeaderInvalidError } from '@app/lib/auth/index.ts';
 import { NotAllowedError } from '@app/lib/auth/index.ts';
-import { LockedError, NotFoundError } from '@app/lib/error.ts';
+import config from '@app/lib/config.ts';
+import { BadRequestError, LockedError, NotFoundError } from '@app/lib/error.ts';
+import {
+  ImageFileTooLarge,
+  ImageTypeCanBeUploaded,
+  sizeLimit,
+  UnsupportedImageFormat,
+  uploadMonoImage,
+} from '@app/lib/image/index.ts';
 import { Security, Tag } from '@app/lib/openapi/index.ts';
 import { createRevision } from '@app/lib/rev/common.ts';
 import type { ICharacterRev } from '@app/lib/rev/type.ts';
 import { CharacterCastRev, CharacterRev, CharacterSubjectRev, RevType } from '@app/lib/rev/type.ts';
 import { deserializeRevText } from '@app/lib/rev/utils.ts';
+import imaginary from '@app/lib/services/imaginary.ts';
 import { InvalidWikiSyntaxError } from '@app/lib/subject/index.ts';
 import * as fetcher from '@app/lib/types/fetcher.ts';
+import * as req from '@app/lib/types/req.ts';
 import * as res from '@app/lib/types/res.ts';
 import { formatErrors } from '@app/lib/types/res.ts';
 import { ghostUser } from '@app/lib/user/utils';
 import { parseConvertedValue } from '@app/lib/utils/index.ts';
-import { matchExpected, WikiChangedError } from '@app/lib/wiki.ts';
+import {
+  extractBirth,
+  extractBloodType,
+  extractGender,
+  matchExpected,
+  WikiChangedError,
+} from '@app/lib/wiki.ts';
 import { requireLogin } from '@app/routes/hooks/pre-handler.ts';
 import type { App } from '@app/routes/type.ts';
-
-export const CharacterWikiInfo = t.Object(
-  {
-    id: t.Integer(),
-    name: t.String(),
-    infobox: t.String(),
-    summary: t.String(),
-  },
-  { $id: 'CharacterWikiInfo' },
-);
-
-export const CharacterEdit = t.Object(
-  {
-    name: t.String({ minLength: 1 }),
-    infobox: t.String({ minLength: 1 }),
-    summary: t.String(),
-  },
-  {
-    $id: 'CharacterEdit',
-    additionalProperties: false,
-  },
-);
-
-type ICharacterRevisionWikiInfo = Static<typeof CharacterRevisionWikiInfo>;
-export const CharacterRevisionWikiInfo = t.Object(
-  {
-    name: t.String(),
-    infobox: t.String(),
-    summary: t.String(),
-    extra: t.Object({
-      img: t.Optional(t.String()),
-    }),
-  },
-  {
-    $id: 'CharacterRevisionWikiInfo',
-  },
-);
 
 type IUserCharacterContribution = Static<typeof UserCharacterContribution>;
 const UserCharacterContribution = t.Object(
@@ -112,8 +97,6 @@ export const CharacterCastRevisionWikiInfo = t.Array(
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function setup(app: App) {
-  app.addSchema(CharacterWikiInfo);
-  app.addSchema(CharacterRevisionWikiInfo);
   app.addSchema(UserCharacterContribution);
   app.addSchema(CharacterSubjectRevisionWikiInfo);
   app.addSchema(CharacterCastRevisionWikiInfo);
@@ -130,7 +113,7 @@ export async function setup(app: App) {
         }),
         security: [{ [Security.CookiesSession]: [], [Security.HTTPBearer]: [] }],
         response: {
-          200: res.Ref(CharacterWikiInfo),
+          200: res.Ref(res.CharacterWikiInfo),
           401: res.Ref(res.Error, {
             'x-examples': formatErrors(new InvalidWikiSyntaxError()),
           }),
@@ -140,7 +123,7 @@ export async function setup(app: App) {
         },
       },
     },
-    async ({ params: { characterID } }): Promise<Static<typeof CharacterWikiInfo>> => {
+    async ({ params: { characterID } }): Promise<res.ICharacterWikiInfo> => {
       const [c] = await db
         .select()
         .from(schema.chiiCharacters)
@@ -150,16 +133,199 @@ export async function setup(app: App) {
         throw new NotFoundError(`character ${characterID}`);
       }
 
-      if (c.lock) {
-        throw new NotAllowedError('edit a locked character');
-      }
-
       return {
         id: c.id,
         name: c.name,
         infobox: c.infobox,
         summary: c.summary,
+        locked: Boolean(c.ban),
+        redirect: c.redirect,
       };
+    },
+  );
+
+  app.post(
+    '/characters',
+    {
+      schema: {
+        tags: [Tag.Wiki],
+        operationId: 'postCharacterInfo',
+        summary: '创建角色',
+        security: [{ [Security.CookiesSession]: [], [Security.HTTPBearer]: [] }],
+        body: t.Object({
+          character: req.CharacterCreate,
+          authorID: t.Optional(
+            t.Integer({
+              exclusiveMinimum: 0,
+              description: 'when header x-admin-token is provided, use this as author id.',
+            }),
+          ),
+        }),
+        response: {
+          200: t.Object({ characterID: t.Integer() }),
+          400: res.Ref(res.Error, {
+            'x-examples': formatErrors(
+              new WikiChangedError(`Index: name
+===================================================================
+--- name	expected
++++ name	current
+@@ -1,1 +1,1 @@
+-1234
++水樹奈々
+`),
+            ),
+          }),
+          401: res.Ref(res.Error, {
+            'x-examples': formatErrors(new InvalidWikiSyntaxError()),
+          }),
+        },
+      },
+      preHandler: [requireLogin('creating a character')],
+    },
+    async ({ auth, headers, body: { character, authorID } }) => {
+      const adminToken = headers['x-admin-token'];
+      if (authorID !== undefined && adminToken !== config.admin_token) {
+        throw new HeaderInvalidError('invalid admin token');
+      }
+
+      if (!auth.permission.mono_edit) {
+        throw new NotAllowedError('edit character');
+      }
+
+      let finalAuthorID = auth.userID;
+      if (authorID !== undefined) {
+        if (!(await fetcher.fetchSlimUserByID(authorID))) {
+          throw new BadRequestError(`user ${authorID} does not exist`);
+        }
+        finalAuthorID = authorID;
+      }
+
+      let wiki: Wiki;
+      try {
+        wiki = parse(character.infobox);
+      } catch (error) {
+        if (error instanceof WikiSyntaxError) {
+          let l = '';
+          if (error.line) {
+            l = `line: ${error.line}`;
+            if (error.lino) {
+              l += `:${error.lino}`;
+            }
+          }
+
+          if (l) {
+            l = ' (' + l + ')';
+          }
+
+          throw new InvalidWikiSyntaxError(`${error.message}${l}`);
+        }
+
+        throw error;
+      }
+
+      let characterID;
+
+      await db.transaction(async (t) => {
+        const now = DateTime.now().toUnixInteger();
+        const [{ insertId }] = await t.insert(schema.chiiCharacters).values({
+          name: character.name,
+          role: character.type,
+          infobox: character.infobox,
+          summary: character.summary,
+          img: '',
+          comment: 0,
+          collects: 0,
+          createdAt: now,
+          lastPost: 0,
+          lock: 0,
+          anidbImg: '',
+          anidbId: 0,
+          nsfw: false,
+        } satisfies typeof schema.chiiCharacters.$inferInsert);
+
+        characterID = insertId;
+
+        let filename, raw;
+        if (character.img) {
+          raw = Buffer.from(character.img, 'base64');
+          // 4mb
+          if (raw.length > sizeLimit) {
+            throw new ImageFileTooLarge();
+          }
+
+          // validate image
+          const resp = await imaginary.info(raw);
+          const format = resp.type;
+
+          if (!format) {
+            throw new UnsupportedImageFormat();
+          }
+
+          if (!ImageTypeCanBeUploaded.includes(format)) {
+            throw new UnsupportedImageFormat();
+          }
+
+          // convert webp to jpeg
+          let ext = format;
+          if (format === 'webp') {
+            raw = await imaginary.convert(raw, { format: 'jpeg' });
+            if (raw.length > sizeLimit) {
+              throw new ImageFileTooLarge();
+            }
+            ext = 'jpeg';
+          }
+
+          // for example "36b8f84d-df4e-4d49-b662-bcde71a8764f"
+          const h = crypto.randomUUID();
+
+          // for example raw/36/b8/${character_id}_crt_f84d-df4e-4d49-b662-bcde71a8764f.jpg"
+          filename = `raw/${h.slice(0, 2)}/${h.slice(2, 4)}/${characterID}_crt_${h}.${ext}`;
+        }
+
+        await t
+          .update(schema.chiiCharacters)
+          .set({
+            img: filename ?? '',
+          })
+          .where(op.eq(schema.chiiCharacters.id, characterID))
+          .limit(1);
+
+        const { year, month, day } = extractBirth(wiki);
+        await t.insert(schema.chiiPersonFields).values({
+          prsnCat: 'crt',
+          prsnId: characterID,
+          gender: extractGender(wiki),
+          bloodtype: extractBloodType(wiki),
+          birthYear: year,
+          birthMon: month,
+          birthDay: day,
+        } satisfies typeof schema.chiiPersonFields.$inferInsert);
+
+        await createRevision(t, {
+          mid: characterID,
+          type: RevType.characterEdit,
+          rev: {
+            crt_name: character.name,
+            crt_infobox: character.infobox,
+            crt_summary: character.summary,
+            extra: {
+              img: filename ?? '',
+            },
+          } satisfies ICharacterRev,
+          creator: finalAuthorID,
+          comment: '新条目',
+        });
+
+        if (filename && raw) {
+          await uploadMonoImage(filename, raw);
+        }
+      });
+
+      if (characterID) {
+        return { characterID };
+      } else {
+        throw new Error('unknown error');
+      }
     },
   );
 
@@ -177,11 +343,24 @@ export async function setup(app: App) {
         body: t.Object(
           {
             commitMessage: t.String({ minLength: 1 }),
-            expectedRevision: t.Partial(CharacterEdit, {
-              default: {},
-              additionalProperties: false,
-            }),
-            character: t.Partial(CharacterEdit, { additionalProperties: false }),
+            expectedRevision: t.Partial(
+              t.Object({
+                name: t.String({ minLength: 1 }),
+                infobox: t.String({ minLength: 1 }),
+                summary: t.String(),
+              }),
+              {
+                default: {},
+                additionalProperties: false,
+              },
+            ),
+            character: t.Partial(req.CharacterEdit, { additionalProperties: false }),
+            authorID: t.Optional(
+              t.Integer({
+                exclusiveMinimum: 0,
+                description: 'when header x-admin-token is provided, use this as author id.',
+              }),
+            ),
           },
           { additionalProperties: false },
         ),
@@ -202,17 +381,61 @@ export async function setup(app: App) {
           401: res.Ref(res.Error, {
             'x-examples': formatErrors(new InvalidWikiSyntaxError()),
           }),
+          ...res.errorResponses(
+            ImageFileTooLarge(),
+            UnsupportedImageFormat(),
+            new NotAllowedError('non sandbox subject'),
+          ),
         },
       },
-      preHandler: [requireLogin('editing a subject info')],
+      preHandler: [requireLogin('editing a character')],
     },
     async ({
       auth,
-      body: { commitMessage, character: input, expectedRevision },
+      headers,
+      body: { commitMessage, character: input, expectedRevision, authorID },
       params: { characterID },
     }) => {
+      const adminToken = headers['x-admin-token'];
+      if (authorID !== undefined && adminToken !== config.admin_token) {
+        throw new HeaderInvalidError('invalid admin token');
+      }
+
       if (!auth.permission.mono_edit) {
         throw new NotAllowedError('edit character');
+      }
+
+      let wiki: Wiki;
+      if (input.infobox) {
+        try {
+          wiki = parse(input.infobox);
+        } catch (error) {
+          if (error instanceof WikiSyntaxError) {
+            let l = '';
+            if (error.line) {
+              l = `line: ${error.line}`;
+              if (error.lino) {
+                l += `:${error.lino}`;
+              }
+            }
+
+            if (l) {
+              l = ' (' + l + ')';
+            }
+
+            throw new InvalidWikiSyntaxError(`${error.message}${l}`);
+          }
+
+          throw error;
+        }
+      }
+
+      let finalAuthorID = auth.userID;
+      if (authorID !== undefined) {
+        if (!(await fetcher.fetchSlimUserByID(authorID))) {
+          throw new BadRequestError(`user ${authorID} does not exist`);
+        }
+        finalAuthorID = authorID;
       }
 
       await db.transaction(async (t) => {
@@ -243,6 +466,26 @@ export async function setup(app: App) {
           .where(op.eq(schema.chiiCharacters.id, characterID))
           .limit(1);
 
+        if (wiki) {
+          const { year, month, day } = extractBirth(wiki);
+          await t
+            .update(schema.chiiPersonFields)
+            .set({
+              gender: extractGender(wiki),
+              bloodtype: extractBloodType(wiki),
+              birthYear: year,
+              birthMon: month,
+              birthDay: day,
+            })
+            .where(
+              op.and(
+                op.eq(schema.chiiPersonFields.prsnCat, 'crt'),
+                op.eq(schema.chiiPersonFields.prsnId, characterID),
+              ),
+            )
+            .limit(1);
+        }
+
         await createRevision(t, {
           mid: characterID,
           type: RevType.characterEdit,
@@ -254,12 +497,142 @@ export async function setup(app: App) {
               img: p.img,
             },
           } satisfies ICharacterRev,
-          creator: auth.userID,
+          creator: finalAuthorID,
           comment: commitMessage,
         });
       });
 
       return {};
+    },
+  );
+
+  app.post(
+    '/characters/:characterID/potraits',
+    {
+      schema: {
+        tags: [Tag.Wiki],
+        operationId: 'uploadCharacterPotrait',
+        summary: '上传角色肖像',
+        params: t.Object({
+          characterID: t.Integer({ minimum: 1 }),
+        }),
+        security: [{ [Security.CookiesSession]: [], [Security.HTTPBearer]: [] }],
+        body: t.Object(
+          {
+            img: t.String({
+              format: 'byte',
+              description: 'base64 encoded raw bytes, 4mb size limit on **decoded** size',
+            }),
+            authorID: t.Optional(
+              t.Integer({
+                exclusiveMinimum: 0,
+                description: 'when header x-admin-token is provided, use this as author id.',
+              }),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: t.Object({
+            img: t.String({ description: 'image filename' }),
+          }),
+          ...res.errorResponses(
+            ImageFileTooLarge(),
+            UnsupportedImageFormat(),
+            new NotAllowedError('edit character'),
+          ),
+        },
+      },
+      preHandler: [requireLogin('uploading image')],
+    },
+    async ({ auth, headers, body: { img: base64Img, authorID }, params: { characterID } }) => {
+      const adminToken = headers['x-admin-token'];
+      if (authorID !== undefined && adminToken !== config.admin_token) {
+        throw new HeaderInvalidError('invalid admin token');
+      }
+
+      if (!auth.permission.mono_edit) {
+        throw new NotAllowedError('edit character');
+      }
+
+      let finalAuthorID = auth.userID;
+      if (authorID !== undefined) {
+        if (!(await fetcher.fetchSlimUserByID(authorID))) {
+          throw new BadRequestError(`user ${authorID} does not exist`);
+        }
+        finalAuthorID = authorID;
+      }
+
+      const [p] = await db
+        .select()
+        .from(schema.chiiCharacters)
+        .where(op.eq(schema.chiiCharacters.id, characterID))
+        .limit(1);
+
+      if (!p) {
+        throw new NotFoundError(`character ${characterID}`);
+      }
+
+      let raw = Buffer.from(base64Img, 'base64');
+      // 4mb
+      if (raw.length > sizeLimit) {
+        throw new ImageFileTooLarge();
+      }
+
+      // validate image
+      const resp = await imaginary.info(raw);
+      const format = resp.type;
+
+      if (!format) {
+        throw new UnsupportedImageFormat();
+      }
+
+      if (!ImageTypeCanBeUploaded.includes(format)) {
+        throw new UnsupportedImageFormat();
+      }
+
+      // convert webp to jpeg
+      let ext = format;
+      if (format === 'webp') {
+        raw = await imaginary.convert(raw, { format: 'jpeg' });
+        if (raw.length > sizeLimit) {
+          throw new ImageFileTooLarge();
+        }
+        ext = 'jpeg';
+      }
+
+      // for example "36b8f84d-df4e-4d49-b662-bcde71a8764f"
+      const h = crypto.randomUUID();
+
+      // for example raw/36/b8/${character_id}_crt_36b8f84d-df4e-4d49-b662-bcde71a8764f.jpg"
+      const filename = `raw/${h.slice(0, 2)}/${h.slice(2, 4)}/${characterID}_crt_${h}.${ext}`;
+
+      await db.transaction(async (t) => {
+        await t
+          .update(schema.chiiCharacters)
+          .set({ img: filename })
+          .where(op.eq(schema.chiiCharacters.id, characterID))
+          .limit(1);
+
+        await createRevision(t, {
+          mid: characterID,
+          type: RevType.characterEdit,
+          rev: {
+            crt_name: p.name,
+            crt_infobox: p.infobox,
+            crt_summary: p.summary,
+            extra: {
+              img: filename,
+            },
+          } satisfies ICharacterRev,
+          creator: finalAuthorID,
+          comment: '新肖像',
+        });
+
+        await uploadMonoImage(filename, raw);
+      });
+
+      return { img: filename };
     },
   );
 
@@ -315,6 +688,7 @@ export async function setup(app: App) {
           id: x.revId,
           creator: {
             username: users[x.revCreator]?.username ?? ghostUser(x.revCreator).username,
+            nickname: users[x.revCreator]?.nickname ?? ghostUser(x.revCreator).nickname,
           },
           type: x.revType,
           createdAt: x.createdAt,
@@ -341,14 +715,14 @@ export async function setup(app: App) {
         }),
         security: [{ [Security.CookiesSession]: [], [Security.HTTPBearer]: [] }],
         response: {
-          200: res.Ref(CharacterRevisionWikiInfo),
+          200: res.Ref(res.CharacterRevisionWikiInfo),
           404: res.Ref(res.Error, {
             'x-examples': formatErrors(new NotFoundError('revision')),
           }),
         },
       },
     },
-    async ({ params: { revisionID } }): Promise<ICharacterRevisionWikiInfo> => {
+    async ({ params: { revisionID } }): Promise<res.ICharacterRevisionWikiInfo> => {
       const [r] = await db
         .select()
         .from(schema.chiiRevHistory)
@@ -433,6 +807,7 @@ export async function setup(app: App) {
           id: x.revId,
           creator: {
             username: users[x.revCreator]?.username ?? ghostUser(x.revCreator).username,
+            nickname: users[x.revCreator]?.nickname ?? ghostUser(x.revCreator).nickname,
           },
           type: x.revType,
           createdAt: x.createdAt,
@@ -588,6 +963,7 @@ export async function setup(app: App) {
           id: x.revId,
           creator: {
             username: users[x.revCreator]?.username ?? ghostUser(x.revCreator).username,
+            nickname: users[x.revCreator]?.nickname ?? ghostUser(x.revCreator).nickname,
           },
           type: x.revType,
           createdAt: x.createdAt,

@@ -48,6 +48,22 @@ export const NotifyType = Object.freeze({
   _32: 32,
   _33: 33,
   _34: 34,
+  SubjectPatchAccepted: 35,
+  EpisodePatchAccepted: 36,
+  SubjectPatchRejected: 37,
+  EpisodePatchRejected: 38,
+  SubjectPatchExpired: 39,
+  EpisodePatchExpired: 40,
+  CharacterPatchAccepted: 41,
+  PersonPatchAccepted: 42,
+  CharacterPatchRejected: 43,
+  PersonPatchRejected: 44,
+  CharacterPatchExpired: 45,
+  PersonPatchExpired: 46,
+  SubjectPatchReply: 47,
+  EpisodePatchReply: 48,
+  CharacterPatchReply: 49,
+  PersonPatchReply: 50,
 });
 
 export type NotifyType = (typeof NotifyType)[keyof typeof NotifyType];
@@ -139,7 +155,7 @@ export const Notify = {
       }
     }
     const hash = hashType(type);
-    let fieldID = 0;
+    let fieldID: number;
     const [field] = await t
       .select()
       .from(schema.chiiNotifyField)
@@ -488,7 +504,8 @@ const _settings: Record<number, setting> = {
   '22': {
     url: `${siteUrl}/user/chobits_user/timeline/status/`,
     anchor: '#post_',
-    prefix: '回复了你的 <a href="%2$s%3$s" class="nt_link link_%4$s" target="_blank">吐槽</a>',
+    // util.format expects args: url, path, hash
+    prefix: '回复了你的 <a href="%s%s" class="nt_link link_%s" target="_blank">吐槽</a>',
     suffix: '',
     id: 22,
     hash: 22,
@@ -606,6 +623,180 @@ const _settings: Record<number, setting> = {
     suffix: '中提到了你',
     id: 34,
     hash: 20,
+    merge: 1,
+  },
+
+  '35': {
+    url: 'https://patch.bgm38.tv/s/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的条目 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被接受',
+    suffix: '',
+    id: 35,
+    hash: 21,
+    merge: 1,
+  },
+  '36': {
+    url: 'https://patch.bgm38.tv/e/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的章节 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被接受',
+    suffix: '',
+    id: 36,
+    hash: 22,
+    merge: 1,
+  },
+  '37': {
+    url: 'https://patch.bgm38.tv/s/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的条目 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被拒绝',
+    suffix: '',
+    id: 37,
+    hash: 21,
+    merge: 1,
+  },
+  '38': {
+    url: 'https://patch.bgm38.tv/e/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的章节 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被拒绝',
+    suffix: '',
+    id: 38,
+    hash: 22,
+    merge: 1,
+  },
+  '39': {
+    url: 'https://patch.bgm38.tv/s/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix: '你的条目 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经过期',
+    suffix: '',
+    id: 39,
+    hash: 21,
+    merge: 1,
+  },
+  '40': {
+    url: 'https://patch.bgm38.tv/e/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix: '你的章节 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经过期',
+    suffix: '',
+    id: 40,
+    hash: 22,
+    merge: 1,
+  },
+
+  '41': {
+    url: 'https://patch.bgm38.tv/c/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的角色 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被接受',
+    suffix: '',
+    id: 41,
+    hash: 23,
+    merge: 1,
+  },
+  '42': {
+    url: 'https://patch.bgm38.tv/p/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的人物 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被接受',
+    suffix: '',
+    id: 42,
+    hash: 24,
+    merge: 1,
+  },
+  '43': {
+    url: 'https://patch.bgm38.tv/c/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的角色 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被拒绝',
+    suffix: '',
+    id: 43,
+    hash: 23,
+    merge: 1,
+  },
+  '44': {
+    url: 'https://patch.bgm38.tv/p/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你的人物 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经被拒绝',
+    suffix: '',
+    id: 44,
+    hash: 24,
+    merge: 1,
+  },
+  '45': {
+    url: 'https://patch.bgm38.tv/c/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix: '你的角色 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经过期',
+    suffix: '',
+    id: 45,
+    hash: 23,
+    merge: 1,
+  },
+  '46': {
+    url: 'https://patch.bgm38.tv/p/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix: '你的人物 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 已经过期',
+    suffix: '',
+    id: 46,
+    hash: 24,
+    merge: 1,
+  },
+  '47': {
+    url: 'https://patch.bgm38.tv/s/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你参与的条目 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 有新回复',
+    suffix: '',
+    id: 47,
+    hash: 21,
+    merge: 1,
+  },
+  '48': {
+    url: 'https://patch.bgm38.tv/e/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你参与的章节 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 有新回复',
+    suffix: '',
+    id: 48,
+    hash: 22,
+    merge: 1,
+  },
+  '49': {
+    url: 'https://patch.bgm38.tv/c/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你参与的角色 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 有新回复',
+    suffix: '',
+    id: 49,
+    hash: 23,
+    merge: 1,
+  },
+  '50': {
+    url: 'https://patch.bgm38.tv/p/',
+    anchor: '#',
+    // util.format expects args: url, path, hash, title
+    prefix:
+      '你参与的人物 patch <a href="%s%s" class="nt_link link_%s" target="_blank">%s</a> 有新回复',
+    suffix: '',
+    id: 50,
+    hash: 24,
     merge: 1,
   },
 };

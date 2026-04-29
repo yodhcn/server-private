@@ -6,12 +6,15 @@ import t from 'typebox';
 
 import {
   CharacterCastType,
+  CharacterType,
   CollectionType,
   EpisodeCollectionStatus,
   EpisodeType,
   GroupMemberRole,
   IndexRelatedCategory,
   IndexType,
+  PersonProfessions,
+  PersonType,
   Ref,
   RevisionType,
   SubjectType,
@@ -516,7 +519,7 @@ export const Character = t.Object(
     id: t.Integer(),
     name: t.String(),
     nameCN: t.String(),
-    role: t.Integer(),
+    role: Ref(CharacterType),
     infobox: Ref(Infobox),
     info: t.String(),
     summary: t.String(),
@@ -561,7 +564,7 @@ export const Person = t.Object(
     id: t.Integer(),
     name: t.String(),
     nameCN: t.String(),
-    type: t.Integer(),
+    type: Ref(PersonType),
     infobox: Ref(Infobox),
     info: t.String(),
     career: t.Array(t.String(), {
@@ -1178,6 +1181,7 @@ export const RevisionHistory = t.Object(
     id: t.Integer(),
     creator: t.Object({
       username: t.String(),
+      nickname: t.String(),
     }),
     type: Ref(RevisionType),
     commitMessage: t.String(),
@@ -1187,3 +1191,62 @@ export const RevisionHistory = t.Object(
 );
 export type IPagedRevisionHistory = Static<typeof PagedRevisionHistory>;
 export const PagedRevisionHistory = Paged(Ref(RevisionHistory));
+
+export type IPersonWikiInfo = Static<typeof PersonWikiInfo>;
+export const PersonWikiInfo = t.Object(
+  {
+    id: t.Integer(),
+    name: t.String(),
+    typeID: Ref(PersonType),
+    infobox: t.String(),
+    summary: t.String(),
+    locked: t.Boolean(),
+    redirect: t.Integer(),
+    profession: PersonProfessions,
+  },
+  { $id: 'PersonWikiInfo' },
+);
+
+export type IPersonRevisionWikiInfo = Static<typeof PersonRevisionWikiInfo>;
+export const PersonRevisionWikiInfo = t.Object(
+  {
+    name: t.String(),
+    infobox: t.String(),
+    summary: t.String(),
+    profession: PersonProfessions,
+    extra: t.Object({
+      img: t.Optional(t.String()),
+    }),
+  },
+  {
+    $id: 'PersonRevisionWikiInfo',
+  },
+);
+
+export type ICharacterWikiInfo = Static<typeof CharacterWikiInfo>;
+export const CharacterWikiInfo = t.Object(
+  {
+    id: t.Integer(),
+    name: t.String(),
+    infobox: t.String(),
+    summary: t.String(),
+    locked: t.Boolean(),
+    redirect: t.Integer(),
+  },
+  { $id: 'CharacterWikiInfo' },
+);
+
+export type ICharacterRevisionWikiInfo = Static<typeof CharacterRevisionWikiInfo>;
+export const CharacterRevisionWikiInfo = t.Object(
+  {
+    name: t.String(),
+    infobox: t.String(),
+    summary: t.String(),
+    extra: t.Object({
+      img: t.Optional(t.String()),
+    }),
+  },
+  {
+    $id: 'CharacterRevisionWikiInfo',
+  },
+);

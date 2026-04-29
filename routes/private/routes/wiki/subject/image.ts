@@ -1,7 +1,5 @@
 import * as crypto from 'node:crypto';
 
-import { createError } from '@fastify/error';
-import { StatusCodes } from 'http-status-codes';
 import * as lo from 'lodash-es';
 import { DateTime } from 'luxon';
 import t from 'typebox';
@@ -10,31 +8,35 @@ import { db, op, schema } from '@app/drizzle';
 import { NotAllowedError } from '@app/lib/auth/index.ts';
 import { imageDomain } from '@app/lib/config.ts';
 import { LockedError, NotFoundError, UnexpectedNotFoundError } from '@app/lib/error.ts';
-import { ImageTypeCanBeUploaded, uploadSubjectImage } from '@app/lib/image/index.ts';
+import {
+  ImageFileTooLarge,
+  ImageTypeCanBeUploaded,
+  sizeLimit,
+  UnsupportedImageFormat,
+  uploadSubjectImage,
+} from '@app/lib/image/index.ts';
 import { LikeType } from '@app/lib/like.ts';
 import { Tag } from '@app/lib/openapi/index.ts';
-import { SubjectImageRepo } from '@app/lib/orm/index.ts';
-import * as orm from '@app/lib/orm/index.ts';
 import imaginary from '@app/lib/services/imaginary.ts';
 import * as Subject from '@app/lib/subject/index.ts';
 import * as fetcher from '@app/lib/types/fetcher.ts';
 import * as res from '@app/lib/types/res.ts';
-import { errorResponses } from '@app/lib/types/res.ts';
 import { requireLogin, requirePermission } from '@app/routes/hooks/pre-handler.ts';
 import type { App } from '@app/routes/type.ts';
 
-const ImageFileTooLarge = createError(
-  'IMAGE_FILE_TOO_LARGE',
-  'uploaded image file is too large',
-  StatusCodes.BAD_REQUEST,
-);
-const UnsupportedImageFormat = createError(
-  'IMAGE_FORMAT_NOT_SUPPORT',
-  `not valid image file, only support ${ImageTypeCanBeUploaded.join(', ')}`,
-  StatusCodes.BAD_REQUEST,
-);
-
-const sizeLimit = 4 * 1024 * 1024;
+async function getSubjectInfo(subjectID: number) {
+  const [data] = await db
+    .select({
+      ban: schema.chiiSubjects.ban,
+      image: schema.chiiSubjects.image,
+      redirect: schema.chiiSubjectFields.redirect,
+    })
+    .from(schema.chiiSubjects)
+    .innerJoin(schema.chiiSubjectFields, op.eq(schema.chiiSubjects.id, schema.chiiSubjectFields.id))
+    .where(op.eq(schema.chiiSubjects.id, subjectID))
+    .limit(1);
+  return data;
+}
 
 export function setup(app: App) {
   app.get(
@@ -70,18 +72,24 @@ export function setup(app: App) {
       preHandler: [requireLogin('list subject covers')],
     },
     async ({ params: { subjectID }, auth }) => {
-      const s = await orm.fetchSubjectByID(subjectID);
+      const s = await getSubjectInfo(subjectID);
       if (!s) {
         throw new NotFoundError(`subject ${subjectID}`);
       }
-      if (s.locked) {
+      if (s.ban === 2) {
         throw new LockedError();
       }
 
-      const images = await SubjectImageRepo.find({
-        where: { subjectID, ban: 0 },
-        order: { id: 'asc' },
-      });
+      const images = await db
+        .select()
+        .from(schema.chiiSubjectImgs)
+        .where(
+          op.and(
+            op.eq(schema.chiiSubjectImgs.imgSubjectId, subjectID),
+            op.eq(schema.chiiSubjectImgs.imgBan, 0),
+          ),
+        )
+        .orderBy(schema.chiiSubjectImgs.imgId);
 
       if (images.length === 0) {
         return {
@@ -90,7 +98,7 @@ export function setup(app: App) {
         };
       }
 
-      const users = await fetcher.fetchSlimUsersByIDs(images.map((x) => x.uid));
+      const users = await fetcher.fetchSlimUsersByIDs(images.map((x) => x.imgUid));
       const likes = lo.groupBy(
         await db
           .select()
@@ -99,7 +107,7 @@ export function setup(app: App) {
             op.and(
               op.inArray(
                 schema.chiiLikes.relatedID,
-                images.map((x) => x.id),
+                images.map((x) => x.imgId),
               ),
               op.eq(schema.chiiLikes.type, LikeType.SubjectCover),
               op.eq(schema.chiiLikes.uid, auth.userID),
@@ -109,7 +117,7 @@ export function setup(app: App) {
         (x) => x.relatedID,
       );
 
-      const currentUpload = s.image ? images.find((x) => x.target === s.image) : undefined;
+      const currentUpload = s.image ? images.find((x) => x.imgTarget === s.image) : undefined;
 
       if (s.image && !currentUpload) {
         throw new UnexpectedNotFoundError(`can't find image uploading for image ${s.image}`);
@@ -118,23 +126,23 @@ export function setup(app: App) {
       return {
         current: currentUpload
           ? {
-              thumbnail: `https://${imageDomain}/r/400/pic/cover/l/${currentUpload.target}`,
-              raw: `https://${imageDomain}/pic/cover/l/${currentUpload.target}`,
-              id: currentUpload.id,
+              thumbnail: `https://${imageDomain}/r/400/pic/cover/l/${currentUpload.imgTarget}`,
+              raw: `https://${imageDomain}/pic/cover/l/${currentUpload.imgTarget}`,
+              id: currentUpload.imgId,
             }
           : undefined,
         covers: images.map((x) => {
-          const creator = users[x.uid];
+          const creator = users[x.imgUid];
           if (!creator) {
-            throw new UnexpectedNotFoundError(`user ${x.uid}`);
+            throw new UnexpectedNotFoundError(`user ${x.imgUid}`);
           }
 
           return {
-            id: x.id,
-            thumbnail: `https://${imageDomain}/r/400/pic/cover/l/${x.target}`,
-            raw: `https://${imageDomain}/pic/cover/l/${x.target}`,
+            id: x.imgId,
+            thumbnail: `https://${imageDomain}/r/400/pic/cover/l/${x.imgTarget}`,
+            raw: `https://${imageDomain}/pic/cover/l/${x.imgTarget}`,
             creator,
-            voted: x.id in likes,
+            voted: x.imgId in likes,
           };
         }),
       };
@@ -153,7 +161,7 @@ export function setup(app: App) {
         }),
         response: {
           200: t.Object({}),
-          ...errorResponses(
+          ...res.errorResponses(
             ImageFileTooLarge(),
             UnsupportedImageFormat(),
             new NotAllowedError('non sandbox subject'),
@@ -203,15 +211,15 @@ export function setup(app: App) {
       // for example "36b8f84d-df4e-4d49-b662-bcde71a8764f"
       const h = crypto.randomUUID();
 
-      // for example raw/36/b8/${subject_id}_f84d-df4e-4d49-b662-bcde71a8764f.jpg"
+      // for example raw/36/b8/${subject_id}_36b8f84d-df4e-4d49-b662-bcde71a8764f.jpg"
       const filename = `raw/${h.slice(0, 2)}/${h.slice(2, 4)}/${subjectID}_${h}.${ext}`;
 
-      const s = await orm.fetchSubjectByID(subjectID);
+      const s = await getSubjectInfo(subjectID);
       if (!s) {
         throw new NotFoundError(`subject ${subjectID}`);
       }
 
-      if (s.locked || s.redirect) {
+      if (s.ban === 2 || s.redirect) {
         throw new LockedError();
       }
 
@@ -245,7 +253,17 @@ export function setup(app: App) {
       ],
     },
     async ({ params: { subjectID, imageID }, auth }) => {
-      const image = await SubjectImageRepo.findOneBy({ subjectID, id: imageID, ban: 0 });
+      const [image] = await db
+        .select()
+        .from(schema.chiiSubjectImgs)
+        .where(
+          op.and(
+            op.eq(schema.chiiSubjectImgs.imgSubjectId, subjectID),
+            op.eq(schema.chiiSubjectImgs.imgId, imageID),
+            op.eq(schema.chiiSubjectImgs.imgBan, 0),
+          ),
+        )
+        .limit(1);
       if (!image) {
         throw new NotFoundError(`image(id=${imageID}, subjectID=${subjectID})`);
       }
